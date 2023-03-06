@@ -111,21 +111,21 @@ class Repository
      *
      * * environment_variables : define environment variables for every ran process
      *
-     * @param string $dir     path to git repository
-     * @param array  $options array of options values
+     * @param string $dir path to git repository
+     * @param array $options array of options values
      *
      * @throws InvalidArgumentException The folder does not exists
      */
     public function __construct($dir, $options = [])
     {
         $options = array_merge([
-            'working_dir'                   => null,
-            'debug'                         => true,
-            'logger'                        => null,
-            'command'                       => 'git',
-            'environment_variables'         => [],
+            'working_dir' => null,
+            'debug' => true,
+            'logger' => null,
+            'command' => 'git',
+            'environment_variables' => [],
             'inherit_environment_variables' => false,
-            'process_timeout'               => 3600,
+            'process_timeout' => 3600,
         ], $options);
 
         if (null !== $options['logger'] && !$options['logger'] instanceof LoggerInterface) {
@@ -137,7 +137,7 @@ class Repository
 
         $this->objects = [];
         $this->command = $options['command'];
-        $this->debug = (bool) $options['debug'];
+        $this->debug = (bool)$options['debug'];
         $this->processTimeout = $options['process_timeout'];
 
         if (defined('PHP_WINDOWS_VERSION_BUILD') && isset($_SERVER['PATH']) && !isset($options['environment_variables']['PATH'])) {
@@ -155,7 +155,7 @@ class Repository
     /**
      * Initializes directory attributes on repository:.
      *
-     * @param string $gitDir     directory of a working copy with files checked out
+     * @param string $gitDir directory of a working copy with files checked out
      * @param string $workingDir directory containing git files (objects, config...)
      */
     private function initDir($gitDir, $workingDir = null)
@@ -166,9 +166,19 @@ class Repository
             throw new InvalidArgumentException(sprintf('Directory "%s" does not exist or is not a directory', $gitDir));
         } elseif (!is_dir($realGitDir)) {
             throw new InvalidArgumentException(sprintf('Directory "%s" does not exist or is not a directory', $realGitDir));
-        } elseif (null === $workingDir && is_dir($realGitDir.'/.git')) {
+        } elseif (null === $workingDir && is_file($realGitDir . '/.git')) {
+            if (!preg_match('/^gitdir: ?(.+)$/', file_get_contents($realGitDir . '/.git'), $matches)) {
+                throw new InvalidArgumentException(sprintf('Directory "%s" contains a .git file, but it is not in the expected format', $realGitDir));
+            }
+            $foundGitPath = realpath($realGitDir . DIRECTORY_SEPARATOR . $matches[1]);
+            if (!is_dir($foundGitPath)) {
+                throw new InvalidArgumentException(sprintf('Directory "%s" contains a .git file, but the directory it points to cannot be found', $realGitDir));
+            }
             $workingDir = $realGitDir;
-            $realGitDir = $realGitDir.'/.git';
+            $realGitDir = $foundGitPath;
+        } elseif (null === $workingDir && is_dir($realGitDir . '/.git')) {
+            $workingDir = $realGitDir;
+            $realGitDir = $realGitDir . '/.git';
         }
 
         $this->gitDir = $realGitDir;
@@ -202,13 +212,13 @@ class Repository
     }
 
     /**
+     * @return Reference|Commit|null current HEAD object or null if error occurs
      * @throws RuntimeException Unable to find file HEAD (debug-mode only)
      *
-     * @return Reference|Commit|null current HEAD object or null if error occurs
      */
     public function getHead()
     {
-        $file = $this->gitDir.'/HEAD';
+        $file = $this->gitDir . '/HEAD';
 
         if (!file_exists($file)) {
             $message = sprintf('Unable to find HEAD file ("%s")', $file);
@@ -225,7 +235,7 @@ class Repository
         $content = trim(file_get_contents($file));
 
         if (null !== $this->logger) {
-            $this->logger->debug('HEAD file read: '.$content);
+            $this->logger->debug('HEAD file read: ' . $content);
         }
 
         if (preg_match('/^ref: (.+)$/', $content, $vars)) {
@@ -395,10 +405,10 @@ class Repository
      *
      * @param array $revisions An array of revisions to show logs from. Can be
      *                         any text value type
-     * @param array $paths     Restrict log to modifications occurring on given
+     * @param array $paths Restrict log to modifications occurring on given
      *                         paths.
-     * @param int   $offset    Start from a given offset in results.
-     * @param int   $limit     Limit number of total results.
+     * @param int $offset Start from a given offset in results.
+     * @param int $limit Limit number of total results.
      *
      * @return Log
      */
@@ -439,7 +449,7 @@ class Repository
             }
         }
 
-        return (int) ($totalBytes / 1000 + 0.5);
+        return (int)($totalBytes / 1000 + 0.5);
     }
 
     /**
@@ -456,7 +466,7 @@ class Repository
             $prefix .= sprintf('export %s=%s;', escapeshellarg($name), escapeshellarg($value));
         }
 
-        proc_open($prefix.'git shell -c '.escapeshellarg($argument), [STDIN, STDOUT, STDERR], $pipes);
+        proc_open($prefix . 'git shell -c ' . escapeshellarg($argument), [STDIN, STDOUT, STDERR], $pipes);
     }
 
     /**
@@ -476,7 +486,7 @@ class Repository
      */
     public function getDescription()
     {
-        $file = $this->gitDir.'/description';
+        $file = $this->gitDir . '/description';
         $exists = is_file($file);
 
         if (null !== $this->logger && true === $this->debug) {
@@ -491,7 +501,7 @@ class Repository
             return static::DEFAULT_DESCRIPTION;
         }
 
-        return file_get_contents($this->gitDir.'/description');
+        return file_get_contents($this->gitDir . '/description');
     }
 
     /**
@@ -511,7 +521,7 @@ class Repository
      */
     public function setDescription($description)
     {
-        $file = $this->gitDir.'/description';
+        $file = $this->gitDir . '/description';
 
         if (null !== $this->logger && true === $this->debug) {
             $this->logger->debug(sprintf('change description file content to "%s" (file: %s)', $description, $file));
@@ -526,11 +536,11 @@ class Repository
      * directly on git repository.
      *
      * @param string $command Git command to run (checkout, branch, tag)
-     * @param array  $args    Arguments of git command
-     *
-     * @throws RuntimeException Error while executing git command (debug-mode only)
+     * @param array $args Arguments of git command
      *
      * @return string Output of a successful process or null if execution failed and debug-mode is disabled.
+     * @throws RuntimeException Error while executing git command (debug-mode only)
+     *
      */
     public function run($command, $args = [])
     {
@@ -597,13 +607,14 @@ class Repository
      * Clones the current repository to a new directory and return instance of new repository.
      *
      * @param string $path path to the new repository in which current repository will be cloned
-     * @param bool   $bare flag indicating if repository is bare or has a working-copy
+     * @param bool $bare flag indicating if repository is bare or has a working-copy
+     * @param $args arguments to be added to the command-line
      *
      * @return Repository the newly created repository
      */
-    public function cloneTo($path, $bare = true, array $options = [])
+    public function cloneTo($path, $bare = true, array $options = [], array $args = [])
     {
-        return Admin::cloneTo($path, $this->gitDir, $bare, $options);
+        return Admin::cloneTo($path, $this->gitDir, $bare, $options, $args);
     }
 
     /**
